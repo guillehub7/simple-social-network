@@ -2,10 +2,14 @@
 const User = require("../models/user");
 const bcrypt = require("bcrypt");
 
+//importar servicios
+const jwt = require("../services/jwt");
+
 //acciones de prueba
 const pruebaUser = (req,res) => {
     return res.status(200).send({
-        message: "mensaje enviado desde: controllers/user.js"
+        message: "mensaje enviado desde: controllers/user.js",
+        usuario: req.user
     });
 }
 
@@ -74,16 +78,73 @@ const register = (req, res) => {
         message: "error en la consulta"
     });
 
-    }) // fin del exec
+    }) // fin del exec    
+} // fin del metodo register
 
+const login = (req,res) => {
+    //recoger parametros del body
+    let params = req.body;
+
+    if(!params.email || !params.password){
+        return res.status(400).send({
+            status: "error",
+            message: "Faltan datos por enviar"
+        });
+    }
+
+    //buscar en la bbdd si existe
+    //select({"password": 0}).exec()
+    User.findOne({email: params.email}).then((user) =>{
+    if(!user){
+    return res.status(404).json({
+        status: "error",
+        message: "No existe el usuario"
+    });
+    }
+    //comprobar su contraseña
+    const pwd = bcrypt.compareSync(params.password, user.password);
+
+    if(!pwd){
+        return res.status(400).send({
+            status: "error",
+            message: "no te has identificado correctamente"
+        });
+    }
+
+
+    //conseguir token
+    const token = jwt.createToken(user);
+
+
+
+    //devolver datos del usuario
+     return res.status(200).send({
+        status: "success",
+        message: "Te has identificado correctamente",
+        user: {
+            id: user._id,
+            name: user.name,
+            nick: user.nick
+        },
+        token
+    });
+
+
+    }).catch((error) =>{
+        return res.status(500).json({
+        status: "error",
+        message: "error en la consulta"
+    });
+    })
 
     
-}
+} // fin del metodo login
 
 
 //exportar acciones
 
 module.exports = {
     pruebaUser,
-    register
+    register,
+    login
 }
