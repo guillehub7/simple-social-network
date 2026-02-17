@@ -1,6 +1,7 @@
 //importar dependencias y modulos
 const User = require("../models/user");
 const bcrypt = require("bcrypt");
+const mongoosePagination = require("mongoose-pagination");
 
 //importar servicios
 const jwt = require("../services/jwt");
@@ -140,11 +141,159 @@ const login = (req,res) => {
     
 } // fin del metodo login
 
+const profile = (req, res) => {
+    //recibir el parametro del id del usuario por la url
+    const id = req.params.id;
+
+    //consulta para sacar los datos del usuario
+    User.findById(id).select({password: 0, role: 0}).exec().then((userProfile) =>{
+        if(!userProfile){
+            return res.status(404).send({
+                status: "Error",
+                message: "El usuario no existe"
+            });
+        }
+         //devolver resultado
+         //posteriormente: devolver informacion de follows
+         return res.status(200).send({
+            status: "success",
+            user: userProfile
+         });
+
+    }).catch((error) => {
+        return res.status(500).json({
+        status: "error",
+        message: "error en la consulta"
+    });
+    })   
+} // fin de metodo profile
+
+const list = async(req, res) => {
+    //controlar en que pagina estamos
+    let page = 1;
+    if(req.params[0]){
+        page = req.params[0];
+    }
+    page = parseInt(page);
+
+    //consulta con mongoose paginate
+    let itemsPerPage = 5;
+
+    try{
+    const users = await User.find()
+            .sort('_id')
+            .paginate(page, itemsPerPage);
+
+     const total = await User.countDocuments();
+
+      if (!users || users.length === 0) {
+            return res.status(404).send({
+                status: "Error",
+                message: "No hay usuarios disponibles"
+            });
+        }
+
+         return res.status(200).send({
+            status: "success",
+            users,
+            page,
+            itemsPerPage,
+            total,
+            pages: Math.ceil(total/itemsPerPage)
+        });
+    }catch(error){
+        return res.status(500).send({
+            status: "Error",
+            message: "Error en la consulta"
+        });
+    }
+
+    // User.find().sort('_id').paginate(page, itemsPerPage).then((users) =>{
+
+    // if(!users){
+    //      return res.status(404).send({
+    //         status: "Error",
+    //         message: "No hay usuarios disponibles"
+    //      });
+    // }
+    //  const total = users.total;
+    //  console.log(total)
+    // //devolver resultado (posteriormente info de follows)
+    // return res.status(200).send({
+    //         status: "success",
+    //         users,
+    //         page,
+    //         itemsPerPage,
+    //         total,
+    //         pages: false
+    //      });
+
+    // }).catch((error) => {
+    //    return res.status(500).send({
+    //         status: "Error",
+    //         message: "Error en la consulta"
+    //      });
+    // }) //fin del find
+
+    
+} // fin del metodo listar
+
+const update = async(req, res) => {
+    //recoger info del usuario a actualizar
+    let userIdentity = req.user;
+    let userToUpdate = req.body;
+
+    //eliminar campos sobrantes
+    delete userToUpdate.iat;
+    delete userToUpdate.exp;
+    delete userToUpdate.role;
+    delete userToUpdate.image;
+
+    //comprobar si el usuario ya existe
+    try{
+const userExist = await User.find({ $or: [
+        {email: userToUpdate.email.toLowerCase()},
+        {nick: userToUpdate.nick.toLowerCase()}
+    ]})
+
+    if(userExist && userExist.length >=1){
+         return res.status(200).send({
+        status: "success",
+        message: "el usuario ya existe"
+    });
+    }
+
+    //cifrar la contraseña
+    if(userToUpdate.password){
+        let pwd = await bcrypt.hash(params.password, 10);
+        userToUpdate.password = pwd;
+    }
+   
+    //Buscar y actualizar
+     return res.status(200).send({
+            status: "success",
+            message: "Metodo de actualizar usuarios",
+            userToUpdate
+         });
+
+    }catch(error){
+        return res.status(500).send({
+        status: "Error",
+        message: "Error en la consulta"
+    });
+    
+    }
+ 
+
+    
+}
 
 //exportar acciones
-
 module.exports = {
     pruebaUser,
     register,
-    login
+    login,
+    profile,
+    list,
+    update
 }
