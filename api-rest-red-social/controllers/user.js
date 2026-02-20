@@ -2,6 +2,8 @@
 const User = require("../models/user");
 const bcrypt = require("bcrypt");
 const mongoosePagination = require("mongoose-pagination");
+const fs = require("fs");
+const path = require("path");
 
 //importar servicios
 const jwt = require("../services/jwt");
@@ -251,42 +253,149 @@ const update = async(req, res) => {
 
     //comprobar si el usuario ya existe
     try{
-const userExist = await User.find({ $or: [
-        {email: userToUpdate.email.toLowerCase()},
-        {nick: userToUpdate.nick.toLowerCase()}
-    ]})
 
-    if(userExist && userExist.length >=1){
-         return res.status(200).send({
-        status: "success",
-        message: "el usuario ya existe"
-    });
-    }
+        let searchConditions = [];
+
+        if(userToUpdate.email){
+            searchConditions.push({ email: userToUpdate.email });
+        }
+
+        if(userToUpdate.nick){
+            searchConditions.push({ nick: userToUpdate.nick });
+        }
+
+        if(searchConditions.length > 0){
+            const users = await User.find({ $or: searchConditions });
+
+            for(let user of users){
+                if(!user._id.equals(userIdentity._id)){
+                    return res.status(400).send({
+                        status: "error",
+                        message: "El usuario ya existe"
+                    });
+                }
+            }
+        }
+
+// const users = await User.find({ $or: [
+//         {email: userToUpdate.email.toLowerCase()},
+//         {nick: userToUpdate.nick.toLowerCase()}
+//     ]})
+
+//     let userIsset = false;
+//     users.forEach(user => {
+//         if(user && user._id != userIdentity._id) userIsset= true;
+//     });
+
+//      if(userIsset){
+//          return res.status(200).send({
+//         status: "success",
+//         message: "el usuario ya existe"
+//     });
+//     }
 
     //cifrar la contraseña
     if(userToUpdate.password){
-        let pwd = await bcrypt.hash(params.password, 10);
+        let pwd = await bcrypt.hash(userToUpdate.password, 10);
         userToUpdate.password = pwd;
     }
    
     //Buscar y actualizar
+    let userUpdated = await User.findByIdAndUpdate(userIdentity.id, userToUpdate, {new: true});
+    if(!userUpdated){
+        return res.status(400).send({
+            status: "Error",
+            message: "Error al actualizar"
+        });
+    }
+
+    //devolver respuesta
      return res.status(200).send({
             status: "success",
             message: "Metodo de actualizar usuarios",
-            userToUpdate
+            userUpdated
          });
 
     }catch(error){
         return res.status(500).send({
         status: "Error",
-        message: "Error en la consulta"
+        message: "Error en la consulta",
     });
     
     }
  
+} // fin del metodo update
 
-    
-}
+const upload = (req, res) => {
+    //recoger el fichero de la imagen y comprobar que existe
+    if(!req.file){
+        return res.status(404).send({
+            status: "Error",
+            message: "peticion no incluye la imagen"
+        });
+    }
+
+    //conseguir el nombre del archivo
+    let image = req.file.originalname;
+
+    //sacar la extension del archivo
+    const imageSplit = image.split("\.");
+    const extension = imageSplit[1];
+
+    //comprobar extension
+    if(extension != "png" && extension != "jpg" && extension != "jpeg" && extension != "gif"){
+        //borrar archivo subido
+       const filePath = req.file.path;
+       const fileDeleted = fs.unlinkSync(filePath);
+       //devolver respuesta negativa
+       return res.status(400).send({
+        status: "Error",
+        message: "extension invalida"
+       });
+
+    }
+    //si es correcta, guardar imagen en bbdd
+    User.findOneAndUpdate({_id: req.user.id}, {image: req.file.filename}, {new: true}).then((userUptaded) => {
+        //devolver respuesta
+        if(!userUptaded){
+         return res.status(500).send({
+         status: "Error",
+         message: "error en la subida"
+       });
+        }
+    return res.status(200).send({
+        status: "success",
+        user: userUptaded,
+        file: req.file
+    })
+
+
+    }).catch((error) => {
+        return res.status(500).send({
+        status: "Error",
+        message: "error en la consulta"
+       });
+    })
+
+} // fin del metodo upload
+
+const avatar = (req, res) => {
+    //sacar el parametro de la url
+    const file = req.params.file;
+
+    //montar el path real de la imagen
+    const filePath = "./uploads/avatars/"+file;
+
+    //comprobar que existe
+    fs.stat(filePath, (error,exists) => {
+        if(!exists) return res.status(404).send({status: "error", message: "no existe la imagen"});
+         //devolver un file
+        res.sendFile(path.resolve(filePath));
+
+    });
+
+   
+} // fin del metodo avatar
 
 //exportar acciones
 module.exports = {
@@ -295,5 +404,7 @@ module.exports = {
     login,
     profile,
     list,
-    update
+    update,
+    upload,
+    avatar
 }
