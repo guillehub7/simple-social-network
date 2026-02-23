@@ -301,7 +301,7 @@ const update = async(req, res) => {
     }
    
     //Buscar y actualizar
-    let userUpdated = await User.findByIdAndUpdate(userIdentity.id, userToUpdate, {new: true});
+    let userUpdated = await User.findByIdAndUpdate({_id: userIdentity.id}, userToUpdate, {new: true});
     if(!userUpdated){
         return res.status(400).send({
             status: "Error",
